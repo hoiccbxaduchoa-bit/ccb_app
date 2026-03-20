@@ -276,7 +276,7 @@ return FutureBuilder(
 
         Center(
           child: Text(
-            info["role"] ?? "",
+            "Tài khoản: ${info["role"]}",
             style: TextStyle(
                 color: Colors.grey),
           ),
@@ -284,7 +284,7 @@ return FutureBuilder(
 
         Center(
           child: Text(
-            "Chi hội: ${info["chiHoi"]}",
+            "Quản lý: ${info["chiHoi"]}",
             style: TextStyle(
                 color: Colors.grey),
           ),

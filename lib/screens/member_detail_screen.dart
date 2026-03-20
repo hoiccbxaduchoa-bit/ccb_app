@@ -6,6 +6,10 @@ import 'package:printing/printing.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../services/photo_service.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/auth_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 class MemberDetailScreen extends StatefulWidget {
 
   final Map member;
@@ -34,33 +38,63 @@ class _MemberDetailScreenState
   /// ================= ROW =================
   Widget row(String title, dynamic value) {
 
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(vertical: 6),
+  bool isPhone = title.toLowerCase().contains("điện thoại");
 
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
 
-        children: [
-
-          SizedBox(
-            width: 160,
-            child: Text(
-              title,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold),
-            ),
+        SizedBox(
+          width: 160,
+          child: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
+        ),
 
-          Expanded(
-            child:
-                Text(value?.toString() ?? ""),
-          )
-        ],
-      ),
-    );
-  }
+        Expanded(
+          child: isPhone
+              ? InkWell(   // 👈 đổi từ GestureDetector → InkWell (mượt hơn)
+                  onTap: () async {
+
+                    final phone = value?.toString().trim() ?? "";
+                    if (phone.isEmpty) return;
+
+                    final uri = Uri(scheme: 'tel', path: phone);
+
+                    try {
+                      await launchUrl(uri);
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Không thể thực hiện cuộc gọi"),
+                        ),
+                      );
+                    }
+                  },
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          value?.toString() ?? "",
+                          style: TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                      Icon(Icons.phone, size: 16, color: Colors.green) // 👈 thêm icon
+                    ],
+                  ),
+                )
+              : Text(value?.toString() ?? ""),
+        )
+      ],
+    ),
+  );
+}
 
   /// ================= DELETE =================
   Future deleteMember(BuildContext context) async {
@@ -99,81 +133,187 @@ class _MemberDetailScreenState
 
   /// ================= PRINT =================
   Future printMember() async {
+  final prefs = await SharedPreferences.getInstance();
+  final tenDonVi =
+    (prefs.getString("donvi") ?? "XÃ ĐỨC HOÀ").toUpperCase();
+  String chucDanhKy = "CHỦ TỊCH";
 
-    final pdf = pw.Document();
+  if (AuthService.role != "admin") {
+    chucDanhKy = "CHI HỘI TRƯỞNG";
+  }
+  // ===== FONT =====
+  final font = await rootBundle.load("assets/fonts/Roboto-Regular.ttf");
+  final boldFont = await rootBundle.load("assets/fonts/Roboto-Bold.ttf");
 
-    pdf.addPage(
-      pw.Page(
-        build: (_) {
+  final ttf = pw.Font.ttf(font);
+  final ttfBold = pw.Font.ttf(boldFont);
 
-          pw.Widget line(String t, dynamic v) {
+  // ===== LOGO =====
+  final logo = await rootBundle.load("assets/images/logo_ccb.png");
+  final logoImage = pw.MemoryImage(logo.buffer.asUint8List());
 
-            return pw.Padding(
-              padding: const pw.EdgeInsets.only(
-                  bottom: 6),
+  // ===== ẢNH HỘI VIÊN =====
+  File photoFile = await PhotoService.getPhoto(member["id"]);
+  pw.ImageProvider? memberImage;
 
-              child: pw.Row(
-                children: [
+  if (photoFile.existsSync()) {
+    memberImage = pw.MemoryImage(photoFile.readAsBytesSync());
+  }
 
-                  pw.SizedBox(
-                    width: 150,
-                    child: pw.Text(
-                      "$t:",
-                      style: pw.TextStyle(
-                        fontWeight:
-                            pw.FontWeight.bold,
-                      ),
-                    ),
-                  ),
+  final pdf = pw.Document();
 
-                  pw.Expanded(
-                    child: pw.Text(
-                        v?.toString() ?? ""),
-                  )
-                ],
-              ),
-            );
-          }
+  pdf.addPage(
+    pw.MultiPage(   // 👈 đổi sang MultiPage để không bị tràn trang
+      build: (_) {
 
-          return pw.Column(
-            crossAxisAlignment:
-                pw.CrossAxisAlignment.start,
-
-            children: [
-
-              pw.Center(
-                child: pw.Text(
-                  "THÔNG TIN HỘI VIÊN CCB",
-                  style: pw.TextStyle(
-                    fontSize: 18,
-                    fontWeight:
-                        pw.FontWeight.bold,
+        pw.Widget line(String t, dynamic v) {
+          return pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 6),
+            child: pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.SizedBox(
+                  width: 160,
+                  child: pw.Text(
+                    "$t",
+                    style: pw.TextStyle(font: ttfBold),
                   ),
                 ),
+                pw.Expanded(
+                  child: pw.Text(
+                    v?.toString() ?? "",
+                    style: pw.TextStyle(font: ttf),
+                  ),
+                )
+              ],
+            ),
+          );
+        }
+
+        return [
+
+          // ===== HEADER =====
+pw.Row(
+  crossAxisAlignment: pw.CrossAxisAlignment.start,
+  children: [
+
+    pw.Image(logoImage, width: 55),
+
+    pw.SizedBox(width: 6),
+
+    pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+
+        pw.Text(
+          "HỘI CỰU CHIẾN BINH VIỆT NAM",
+          style: pw.TextStyle(font: ttfBold, fontSize: 12),
+        ),
+
+        pw.Text(
+          tenDonVi,
+          style: pw.TextStyle(font: ttfBold, fontSize: 12),
+        ),
+
+        pw.SizedBox(height: 3),
+
+        pw.Text(
+          "THÔNG TIN HỘI VIÊN",
+          style: pw.TextStyle(font: ttfBold, fontSize: 16),
+        ),
+      ],
+    )
+  ],
+),
+
+pw.SizedBox(height: 10),
+pw.Divider(thickness: 1), // 👈 thêm cho đẹp
+pw.SizedBox(height: 15),
+
+          // ===== ẢNH + THÔNG TIN =====
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+
+              pw.Container(
+                width: 100,
+                height: 130,
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(),
+                ),
+                child: memberImage != null
+                    ? pw.Image(memberImage, fit: pw.BoxFit.cover)
+                    : pw.Center(
+                        child: pw.Text("NO PHOTO",
+                            style: pw.TextStyle(font: ttf)),
+                      ),
               ),
 
-              pw.SizedBox(height: 20),
+              pw.SizedBox(width: 15),
 
-              line("Họ tên", member["ho_ten"]),
-              line("CCCD", member["so_cccd"]),
-              line("Năm sinh",
-                  member["nam_sinh"]),
-              line("Chi hội",
-                  member["chi_hoi"]),
-              line("Điện thoại",
-                  member["so_dien_thoai"]),
-              line("Ngày vào hội",
-                  member["ngay_vao_hoi"]),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+
+                    line("Họ tên:", member["ho_ten"]),
+                    line("CCCD:", member["so_cccd"]),
+                    line("Năm sinh:", member["nam_sinh"]),
+                    line("Chi hội:", member["chi_hoi"]),
+                    line("Điện thoại:", member["so_dien_thoai"]),
+                    line("Ngày vào hội:", member["ngay_vao_hoi"]),
+                    line("Chức vụ hội:", member["chuc_vu_hoi"]),
+                    line("Ngày nhập ngũ:", member["ngay_nhap_ngu"]),
+                    line("Ngày xuất ngũ:", member["ngay_xuat_ngu"]),
+                    line("Cấp bậc:", member["cap_bac_truoc_xuat_ngu"]),
+                    line("Chức vụ trước xuất ngũ:", member["chuc_vu_truoc_xuat_ngu"]),
+                    line("Đơn vị trước xuất ngũ:", member["don_vi_truoc_xuat_ngu"]),
+                    line("Trình độ học vấn:", member["trinh_do_hoc_van"]),
+                    line("Trình độ chuyên môn:", member["trinh_do_chuyen_mon"]),
+                    line("Ngày vào Đảng:", member["ngay_vao_dang"]),
+                    line("Trình độ LLCT:", member["trinh_do_llct"]),
+                    line("Chế độ chính sách:", member["che_do_chinh_sach"]),
+                    line("Tham gia kháng chiến:", member["tham_gia_khang_chien"]),
+                    line("Khen thưởng:", member["khen_thuong"]),
+                    line("Ghi chú:", member["ghi_chu"]),
+                    line("BHYT:", member["bhyt"]),
+                    line("KNC:", member["knc"]),
+                    line("MSH:", member["msh"]),
+                    line("Quỹ đồng đội:", member["quy_dong_doi"]),
+                  ],
+                ),
+              )
             ],
-          );
-        },
-      ),
-    );
+          ),
 
-    await Printing.layoutPdf(
-      onLayout: (_) async => pdf.save(),
-    );
-  }
+          pw.SizedBox(height: 10),
+
+          // ===== FOOTER =====
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Column(
+                children: [
+                  pw.Text("TM. HỘI CCB XÃ",
+                      style: pw.TextStyle(font: ttfBold)),
+                  pw.Text("CHỦ TỊCH",
+                      style: pw.TextStyle(font: ttfBold)),
+                  pw.SizedBox(height: 0),
+                  pw.Text("(Ký, ghi rõ họ tên)",
+                      style: pw.TextStyle(font: ttf)),
+                ],
+              )
+            ],
+          )
+        ];
+      },
+    ),
+  );
+
+  await Printing.layoutPdf(
+    onLayout: (_) async => pdf.save(),
+  );
+}
 
   /// ================= PICK IMAGE =================
   pickImage() async {
@@ -295,7 +435,7 @@ class _MemberDetailScreenState
 
                 ElevatedButton.icon(
                   icon: const Icon(Icons.edit),
-                  label: const Text("Sửa"),
+                  label: const Text("Xem & Sửa"),
                   onPressed: () async {
 
                     await Navigator.push(

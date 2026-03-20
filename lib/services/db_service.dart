@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 
 class DBService {
 
@@ -18,16 +19,10 @@ _db = await openDatabase(
 path,
 version: 1,
 
-
 onCreate: (db, version) async {
-
-  /// =============================
-  /// MEMBERS TABLE
-  /// =============================
 
   await db.execute('''
   CREATE TABLE IF NOT EXISTS members(
-
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
     ho_ten TEXT,
@@ -63,27 +58,22 @@ onCreate: (db, version) async {
     knc TEXT,
     msh TEXT,
     photo TEXT,
-    quy_dong_doi INTEGER
+    quy_dong_doi INTEGER,
+
+    uid TEXT,
+    updated_at TEXT
   )
   ''');
-
-  /// USERS TABLE
 
   await db.execute('''
   CREATE TABLE IF NOT EXISTS users(
-
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-
     username TEXT UNIQUE,
     password TEXT,
-
     role TEXT,
     chi_hoi TEXT
-
   )
   ''');
-
-  /// ADMIN DEFAULT
 
   await db.insert("users",{
     "username":"admin",
@@ -93,32 +83,20 @@ onCreate: (db, version) async {
   });
 
 },
-
-
 );
 
-/// =============================
-/// ĐẢM BẢO BẢNG USERS TỒN TẠI
-/// =============================
-
+/// đảm bảo users tồn tại
 await _db!.execute('''
 CREATE TABLE IF NOT EXISTS users(
-
-
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 username TEXT UNIQUE,
 password TEXT,
 role TEXT,
 chi_hoi TEXT
-
-
 )
 ''');
 
-/// =============================
-/// TẠO ADMIN NẾU CHƯA CÓ
-/// =============================
-
+/// đảm bảo admin
 var admin = await _db!.query(
 "users",
 where:"username=?",
@@ -126,32 +104,89 @@ whereArgs:["admin"]
 );
 
 if(admin.isEmpty){
-
-
 await _db!.insert("users",{
   "username":"admin",
   "password":"123456",
   "role":"chu_tich",
   "chi_hoi":"all"
 });
+}
 
+/// thêm cột thiếu
+await addColumnIfNotExists(_db!, "knc", "TEXT");
+await addColumnIfNotExists(_db!, "msh", "TEXT");
+await addColumnIfNotExists(_db!, "quy_dong_doi", "INTEGER");
+await addColumnIfNotExists(_db!, "uid", "TEXT");
+await addColumnIfNotExists(_db!, "updated_at", "TEXT");
+
+/// UNIQUE UID
+await _db!.execute(
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_uid ON members(uid)"
+);
+
+return _db!;
+}
+
+/// =============================
+/// INSERT MEMBER
+/// =============================
+static Future<int> insert(
+Map<String,dynamic> data) async {
+
+final db = await database();
+
+/// auto uid
+if (data["uid"] == null || data["uid"].toString().isEmpty) {
+  data["uid"] = Uuid().v4();
+}
+
+/// timestamp
+data["updated_at"] = DateTime.now().toIso8601String();
+
+return await db.insert(
+"members",
+data,
+conflictAlgorithm: ConflictAlgorithm.abort,
+);
 
 }
 
 /// =============================
-/// TỰ ĐỘNG THÊM CỘT NẾU THIẾU
+/// UPDATE MEMBER
 /// =============================
+static Future<int> update(
+int id,
+Map<String,dynamic> data) async {
 
-try {
-await _db!.execute(
-"ALTER TABLE members ADD COLUMN photo TEXT");
-} catch (e) {}
+final db = await database();
 
-await addColumnIfNotExists(_db!, "knc", "TEXT");
-await addColumnIfNotExists(_db!, "msh", "TEXT");
-await addColumnIfNotExists(_db!, "quy_dong_doi", "INTEGER");
+/// giữ uid
+data.remove("uid");
 
-return _db!;
+/// update time
+data["updated_at"] = DateTime.now().toIso8601String();
+
+return await db.update(
+"members",
+data,
+where:"id=?",
+whereArgs:[id],
+);
+
+}
+
+/// =============================
+/// DELETE MEMBER
+/// =============================
+static Future deleteMember(int id) async {
+
+final db = await database();
+
+await db.delete(
+"members",
+where:"id=?",
+whereArgs:[id],
+);
 
 }
 
@@ -170,8 +205,6 @@ orderBy: "ho_ten ASC",
 }
 
 /// =============================
-/// GET MEMBERS BY CHI HOI
-/// =============================
 static Future<List<Map<String,dynamic>>> getMembersByChiHoi(
 String chiHoi) async {
 
@@ -181,56 +214,6 @@ return await db.query(
 "members",
 where:"chi_hoi=?",
 whereArgs:[chiHoi],
-);
-
-}
-
-/// =============================
-/// INSERT MEMBER
-/// =============================
-static Future<int> insert(
-Map<String,dynamic> data) async {
-
-final db = await database();
-
-return await db.insert(
-"members",
-data,
-conflictAlgorithm: ConflictAlgorithm.replace,
-);
-
-}
-
-/// =============================
-/// UPDATE MEMBER
-/// =============================
-static Future<int> update(
-int id,
-Map<String,dynamic> data) async {
-
-final db = await database();
-
-return await db.update(
-"members",
-data,
-where:"id=?",
-whereArgs:[id],
-conflictAlgorithm: ConflictAlgorithm.replace,
-);
-
-}
-
-/// =============================
-/// DELETE MEMBER
-/// =============================
-static Future deleteMember(int id) async {
-
-final db = await database();
-
-await db.delete(
-"members",
-where:"id=?",
-whereArgs:[id],
 );
 
 }
@@ -259,8 +242,6 @@ return null;
 }
 
 /// =============================
-/// CREATE USER
-/// =============================
 static Future createUser(
 String username,
 String password,
@@ -283,18 +264,13 @@ conflictAlgorithm: ConflictAlgorithm.replace,
 }
 
 /// =============================
-/// GET USERS
-/// =============================
 static Future<List<Map<String,dynamic>>> getUsers() async {
 
 final db = await database();
-
 return await db.query("users");
 
 }
 
-/// =============================
-/// DELETE USER
 /// =============================
 static Future deleteUser(int id) async {
 
@@ -308,8 +284,6 @@ whereArgs:[id],
 
 }
 
-/// =============================
-/// RESET PASSWORD
 /// =============================
 static Future resetPassword(int id) async {
 
@@ -325,24 +299,15 @@ whereArgs:[id]
 }
 
 /// =============================
-/// CLOSE DATABASE
-/// =============================
 static Future closeDB() async {
 
 if(_db != null){
-
-
 await _db!.close();
-
 _db = null;
-
-
 }
 
 }
 
-/// =============================
-/// ADD COLUMN IF NOT EXISTS
 /// =============================
 static Future addColumnIfNotExists(
 Database db,
@@ -356,18 +321,12 @@ bool exists =
 result.any((c)=>c["name"]==column);
 
 if(!exists){
-
-
 await db.execute(
-    "ALTER TABLE members ADD COLUMN $column $type");
-
-
+"ALTER TABLE members ADD COLUMN $column $type");
 }
 
 }
 
-/// =============================
-/// DATABASE PATH
 /// =============================
 static Future<String> dbPath() async {
 
