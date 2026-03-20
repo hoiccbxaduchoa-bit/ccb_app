@@ -1,19 +1,21 @@
 workflows:
   ios-build:
-    name: iOS Build
+    name: Build iOS
 
     environment:
       flutter: stable
 
     scripts:
-      - name: Get Flutter packages
+      - name: Get dependencies
         script: |
+          cd ccb_app
           flutter clean
           flutter pub get
 
       - name: Build iOS
         script: |
+          cd ccb_app
           flutter build ios --release
 
     artifacts:
-      - build/ios/ipa/*.ipa
+      - ccb_app/build/ios/ipa/*.ipa
