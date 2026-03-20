@@ -1,25 +1,19 @@
 workflows:
   ios-build:
     name: iOS Build
-    max_build_duration: 60
 
     environment:
       flutter: stable
-      xcode: latest
 
     scripts:
-      - name: Check folder
+      - name: Get Flutter packages
         script: |
-          pwd
-          ls
-
-      - name: Install dependencies
-        script: |
+          flutter clean
           flutter pub get
 
       - name: Build iOS
         script: |
-          flutter build ios --release --no-codesign
+          flutter build ios --release
 
     artifacts:
-      - build/ios/iphoneos/*.app
+      - build/ios/ipa/*.ipa
