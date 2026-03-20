@@ -5,8 +5,6 @@ workflows:
     environment:
       flutter: stable
 
-    working_directory: ccb_app   # 👈 QUAN TRỌNG
-
     scripts:
       - flutter clean
       - flutter pub get
