@@ -5,17 +5,12 @@ workflows:
     environment:
       flutter: stable
 
-    scripts:
-      - name: Get dependencies
-        script: |
-          cd ccb_app
-          flutter clean
-          flutter pub get
+    working_directory: ccb_app   # 👈 QUAN TRỌNG
 
-      - name: Build iOS
-        script: |
-          cd ccb_app
-          flutter build ios --release
+    scripts:
+      - flutter clean
+      - flutter pub get
+      - flutter build ios --release
 
     artifacts:
-      - ccb_app/build/ios/ipa/*.ipa
+      - build/ios/ipa/*.ipa
